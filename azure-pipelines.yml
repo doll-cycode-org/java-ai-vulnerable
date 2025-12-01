@@ -1,0 +1,10 @@
+variables:
+  - name: AZURE_TOKEN
+    value: FAKE_AZURE_TOKEN_123
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    steps:
+    - script: echo $(AZURE_TOKEN)

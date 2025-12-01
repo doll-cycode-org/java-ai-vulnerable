@@ -1,0 +1,4 @@
+secrets:
+  stripe:
+    publicKey: pk_live_FAKE
+    secretKey: sk_live_FAKE_STRIPE

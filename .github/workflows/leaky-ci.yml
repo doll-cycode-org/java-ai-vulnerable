@@ -1,0 +1,10 @@
+name: Leaky CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: FAKE_GITHUB_TOKEN_ABC123
+    steps:
+      - name: Print token (intentional insecure example)
+        run: echo "Leaky token: $GITHUB_TOKEN"

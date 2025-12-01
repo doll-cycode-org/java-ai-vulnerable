@@ -1,0 +1,9 @@
+version: 2.1
+jobs:
+  build:
+    docker:
+      - image: cimg/base:stable
+    environment:
+      CIRCLE_TOKEN: FAKE_CIRCLECI_TOKEN_123
+    steps:
+      - run: echo "CircleCI token: $CIRCLE_TOKEN"
