@@ -1,2 +1,1 @@
 aws_access_key = "AKIAFAKEACCESSKEYEXAMPLE"
-aws_secret_key = "FAKE_AWS_SECRET_KEY_1234567890"
