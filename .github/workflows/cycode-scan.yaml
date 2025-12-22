@@ -1,107 +1,93 @@
-name: Cycode OIDC Scan
+name: Cycode OIDC Debug Scan
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 permissions:
-  id-token: write  # Essential for OIDC
+  id-token: write
   contents: read
 
 jobs:
-  cycode-scan:
+  cycode-debug:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: pip install requests pyjwt
 
-      - name: Install Python and Requests
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - run: pip install requests cycode
-
-      - name: Generate Cycode Access Token
-        id: cycode_auth
+      - name: Debug OIDC & Exchange
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
-          # Ensure this matches your specific tenant URL
           CYCODE_AUTH_URL: "https://api.cycode.com/api/v1/auth/oidc/token"
         run: |
           python -c "
           import os
           import requests
           import sys
+          import jwt
 
-          # --- Step 1: Get GitHub OIDC Token ---
+          # --- CONFIGURATION ---
+          # We must match the Audience you locked in Cycode
+          audience = 'cycode-service'
+          # ---------------------
+
+          # 1. Get GitHub Token
           request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
           request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
-          
-          # Audience: Usually 'cycode-service' or your Client ID
-          audience = 'cycode-service'
 
-          if not request_token or not request_url:
-              print('::error::OIDC variables missing.')
+          if not request_token:
+              print('::error::No OIDC token found. Check permissions.')
               sys.exit(1)
 
           try:
-              # Get the raw JWT from GitHub
-              gh_headers = {'Authorization': f'Bearer {request_token}'}
-              oidc_resp = requests.get(f'{request_url}&audience={audience}', headers=gh_headers)
-              oidc_resp.raise_for_status()
-              github_jwt = oidc_resp.json()['value']
-              print('::notice::GitHub OIDC Token retrieved.')
+              # Request Token
+              headers = {'Authorization': f'Bearer {request_token}'}
+              resp = requests.get(f'{request_url}&audience={audience}', headers=headers)
+              resp.raise_for_status()
+              jwt_token = resp.json()['value']
+
+              # --- CRITICAL DEBUGGING ---
+              # Verify exactly what GitHub is sending vs what Cycode expects
+              decoded = jwt.decode(jwt_token, options={'verify_signature': False})
+              print('\n============= TOKEN INSPECTION =============')
+              print(f' 1. Iss (Issuer):   {decoded.get(\'iss\')}')
+              print(f' 2. Aud (Audience): {decoded.get(\'aud\')}')
+              print(f' 3. Sub (Subject):  {decoded.get(\'sub\')}')
+              print('============================================\n')
+              
+              print(f'::notice::Token Subject is: {decoded.get(\'sub\')}')
+              # --------------------------
+
           except Exception as e:
-              print(f'::error::GitHub OIDC failure: {e}')
+              print(f'::error::GitHub Token Fetch Error: {e}')
               sys.exit(1)
 
-          # --- Step 2: Exchange for Cycode Access Token ---
-          # We pass the GitHub JWT in the Authorization header
-          exchange_headers = {
-              'Authorization': f'Bearer {github_jwt}',
-              'Content-Type': 'application/json'
-          }
-          
-          exchange_payload = {
-              'clientId': os.environ.get('CYCODE_CLIENT_ID')
-          }
-
+          # 2. Exchange with Cycode
           try:
-              # Perform the exchange
-              cy_resp = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=exchange_payload, headers=exchange_headers)
+              # Sending BOTH formats to be safe
+              payload = {
+                  'clientId': os.environ.get('CYCODE_CLIENT_ID'),
+                  'client_id': os.environ.get('CYCODE_CLIENT_ID')
+              }
               
-              if cy_resp.status_code != 200:
-                  print(f'::error::Cycode Exchange Failed: {cy_resp.status_code} - {cy_resp.text}')
-                  sys.exit(1)
+              # Token goes in Header
+              auth_headers = {
+                  'Authorization': f'Bearer {jwt_token}',
+                  'Content-Type': 'application/json'
+              }
 
-              # 'token' is the standard key often returned here, but we default to checking 'access_token' too
-              data = cy_resp.json()
-              cycode_token = data.get('token') or data.get('access_token')
-
-              if not cycode_token:
-                  print(f'::error::No token found in response: {data.keys()}')
-                  sys.exit(1)
-
-              # --- Step 3: Set Environment for Next Steps ---
-              print('::add-mask::' + cycode_token)
-              with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  # CYCODE_API_TOKEN is the standard var the CLI looks for
-                  f.write(f'CYCODE_API_TOKEN={cycode_token}\n')
+              print(f'Attempting exchange with Aud: {audience}...')
+              cy_resp = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=payload, headers=auth_headers)
               
-              print('::notice::Cycode Access Token generated and set.')
+              if cy_resp.status_code == 200:
+                  print('::notice::SUCCESS! Token exchanged.')
+                  print(f'Response keys: {cy_resp.json().keys()}')
+              else:
+                  print(f'::error::Exchange Failed [{cy_resp.status_code}]')
+                  print(f'Response Body: {cy_resp.text}')
+                  sys.exit(1)
 
           except Exception as e:
-              print(f'::error::Exchange logic error: {e}')
+              print(f'::error::Exchange Script Error: {e}')
               sys.exit(1)
           "
-
-      - name: Run Cycode Scan
-        # The CLI will now see CYCODE_API_TOKEN in the env
-        run: |
-          cycode scan path ./ \
-            --branch ${{ github.head_ref || github.ref_name }} \
-            --sca-scan \
-            --iac-scan \
-            --secret-scan
