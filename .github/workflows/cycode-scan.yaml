@@ -35,7 +35,7 @@ jobs:
           import requests
           import sys
           # Docs say: Audience must match Client ID
-          client_id = os.environ.get('CYCODE_CLIENT_ID')
+          client_id = "cycode-service"
           
           # GitHub Actions OIDC Endpoint
           token_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
