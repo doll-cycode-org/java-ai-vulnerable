@@ -1,4 +1,3 @@
-
 name: Cycode OIDC Scan
 
 on:
@@ -26,7 +25,7 @@ jobs:
       - name: Install Cycode CLI
         run: pip install cycode
 
-      # 1. Fetch GitHub OIDC Token (Audience = Client ID)
+      # 1. Fetch GitHub OIDC Token (Audience = cycode-service)
       - name: Fetch and Set OIDC Token
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
@@ -35,19 +34,24 @@ jobs:
           import os
           import requests
           import sys
-          # Docs say: Audience must match Client ID
-          client_id = os.environ.get('CYCODE_CLIENT_ID')
+
+          # --- CONFIGURATION ---
+          # Requesting specific audience as requested
+          audience = 'cycode-service'
+          # ---------------------
           
           # GitHub Actions OIDC Endpoint
           token_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
           request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
+
           if not token_url or not request_token:
               print('::error::OIDC Environment variables missing')
               sys.exit(1)
+
           try:
-              # Request token specifically for the Client ID
+              # Request token specifically for 'cycode-service'
               headers = {'Authorization': f'Bearer {request_token}'}
-              resp = requests.get(f'{token_url}&audience={client_id}', headers=headers)
+              resp = requests.get(f'{token_url}&audience={audience}', headers=headers)
               resp.raise_for_status()
               jwt = resp.json()['value']
               
@@ -58,15 +62,16 @@ jobs:
               with open(os.environ['GITHUB_ENV'], 'a') as f:
                   f.write(f'CYCODE_ID_TOKEN={jwt}\n')
               
-              print('::notice::CYCODE_ID_TOKEN has been set.')
+              print('::notice::CYCODE_ID_TOKEN has been set for audience: cycode-service')
           
           except Exception as e:
               print(f'::error::Failed to fetch OIDC token: {e}')
               sys.exit(1)
           "
-      # 2. Run Scan (CLI handles the exchange automatically)
+
+      # 2. Run Scan (CLI handles the exchange automatically using CYCODE_ID_TOKEN)
       - name: Run Cycode Scan
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
-          cycode scan --scan-type sca repository . 
+          cycode scan --scan-type sca repository .
