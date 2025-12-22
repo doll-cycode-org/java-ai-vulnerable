@@ -1,4 +1,4 @@
-name: Cycode OIDC Fix
+name: Cycode OIDC Final Fix
 
 on:
   push:
@@ -9,96 +9,97 @@ permissions:
   contents: read
 
 jobs:
-  cycode-exchange-fix:
+  cycode-oidc-fix:
     runs-on: ubuntu-latest
     steps:
       - name: Install Dependencies
         run: pip install requests
 
-      - name: Attempt Token Exchange (Body Method)
+      - name: Exchange Token (Client Assertion Flow)
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
+          # Ensure this URL is correct. Some tenants use specific regional URLs.
           CYCODE_AUTH_URL: "https://api.cycode.com/api/v1/auth/oidc/token"
         run: |
-          cat <<EOF > fix_cycode.py
+          cat <<EOF > exchange.py
           import os
           import requests
           import sys
 
-          # 1. Get GitHub Token (Audience = cycode-service)
+          # --- CONFIG ---
+          # We use the Audience you configured in Cycode
+          audience = 'cycode-service'
+          # --------------
+
+          # 1. Get GitHub Token
           request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
           request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
-          audience = 'cycode-service'
 
           if not request_token:
               print('::error::No OIDC token found.')
               sys.exit(1)
 
           try:
+              # Request Token from GitHub
               headers = {'Authorization': f'Bearer {request_token}'}
               resp = requests.get(f'{request_url}&audience={audience}', headers=headers)
               resp.raise_for_status()
               github_jwt = resp.json()['value']
-              print('::notice::GitHub Token Acquired')
+              print('::notice::GitHub OIDC Token Acquired')
           except Exception as e:
               print(f'::error::GitHub OIDC failure: {e}')
               sys.exit(1)
 
-          # 2. Exchange with Cycode (Token in BODY, not Header)
-          client_id = os.environ.get('CYCODE_CLIENT_ID', '').strip() # Strip whitespace
+          # 2. Exchange with Cycode (RFC 7523 Client Assertion)
+          # We are authenticating AS the Client (Service Account) using the JWT as proof
+          
           url = os.environ.get('CYCODE_AUTH_URL')
-
-          # Attempt 1: Standard 'idToken' field
-          payload_1 = {
-              'clientId': client_id,
-              'idToken': github_jwt
+          client_id = os.environ.get('CYCODE_CLIENT_ID', '').strip()
+          
+          payload = {
+              'grant_type': 'client_credentials',
+              'client_id': client_id,
+              'client_assertion_type': 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+              'client_assertion': github_jwt,
+              'audience': audience 
           }
           
-          print(f'Attempting exchange (Payload: idToken)...')
-          
-          # NOTE: No Authorization header here. We are unauthenticated, asking for a token.
-          try:
-              res = requests.post(url, json=payload_1)
-              
-              if res.status_code == 200:
-                  print('::notice::SUCCESS! Token exchanged using "idToken" field.')
-                  token = res.json().get('token') or res.json().get('access_token')
-                  print(f'::add-mask::{token}')
-                  with open(os.environ['GITHUB_ENV'], 'a') as f:
-                      f.write(f'CYCODE_API_TOKEN={token}\n')
-                  sys.exit(0) # Exit successfully
-              else:
-                  print(f'Attempt 1 Failed [{res.status_code}]: {res.text}')
-          except Exception as e:
-              print(f'Attempt 1 Error: {e}')
-
-          # Attempt 2: Alternative 'assertion' field (RFC 7523 style)
-          print(f'Attempting exchange (Payload: assertion)...')
-          payload_2 = {
-              'clientId': client_id,
-              'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-              'assertion': github_jwt
+          # CRITICAL: We send the token in the Header AND Body to satisfy both
+          # the Gateway (which wants a header) and the API (which wants the assertion)
+          auth_headers = {
+              'Authorization': f'Bearer {github_jwt}',
+              'Content-Type': 'application/x-www-form-urlencoded' # Standard OAuth format
           }
+
+          print(f'Attempting Client Credentials Exchange...')
           
           try:
-              res = requests.post(url, json=payload_2)
+              # We use 'data' instead of 'json' for x-www-form-urlencoded
+              res = requests.post(url, data=payload, headers=auth_headers)
               
               if res.status_code == 200:
-                  print('::notice::SUCCESS! Token exchanged using "assertion" field.')
-                  token = res.json().get('token') or res.json().get('access_token')
-                  print(f'::add-mask::{token}')
-                  with open(os.environ['GITHUB_ENV'], 'a') as f:
-                      f.write(f'CYCODE_API_TOKEN={token}\n')
-                  sys.exit(0)
+                  print('::notice::SUCCESS! Token exchanged.')
+                  data = res.json()
+                  token = data.get('token') or data.get('access_token')
+                  
+                  if token:
+                      print(f'::add-mask::{token}')
+                      with open(os.environ['GITHUB_ENV'], 'a') as f:
+                          f.write(f'CYCODE_API_TOKEN={token}\n')
+                  else:
+                       print(f'::error::Success response but no token found: {data.keys()}')
+                       sys.exit(1)
               else:
-                  print(f'Attempt 2 Failed [{res.status_code}]: {res.text}')
-                  sys.exit(1) # Fail if both attempts miss
+                  print(f'::error::Exchange Failed [{res.status_code}]')
+                  print(f'Response Body: {res.text}')
+                  sys.exit(1)
+
           except Exception as e:
-              print(f'Attempt 2 Error: {e}')
+              print(f'::error::Script Error: {e}')
               sys.exit(1)
           EOF
           
-          python fix_cycode.py
+          python exchange.py
 
       - name: Run Cycode Scan
         if: success()
