@@ -1,4 +1,4 @@
-name: Cycode OIDC Debug Scan
+name: Cycode OIDC Fix
 
 on:
   push:
@@ -9,91 +9,98 @@ permissions:
   contents: read
 
 jobs:
-  cycode-debug:
+  cycode-exchange-fix:
     runs-on: ubuntu-latest
     steps:
       - name: Install Dependencies
-        run: pip install requests pyjwt
+        run: pip install requests
 
-      - name: Debug OIDC & Exchange
+      - name: Attempt Token Exchange (Body Method)
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
           CYCODE_AUTH_URL: "https://api.cycode.com/api/v1/auth/oidc/token"
         run: |
-          # 1. Write the Python script to a file (avoids quoting errors)
-          cat <<EOF > debug_cycode.py
+          cat <<EOF > fix_cycode.py
           import os
           import requests
           import sys
-          import jwt
 
-          # --- CONFIGURATION ---
-          audience = 'cycode-service'
-          # ---------------------
-
-          # 1. Get GitHub Token
+          # 1. Get GitHub Token (Audience = cycode-service)
           request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
           request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
+          audience = 'cycode-service'
 
           if not request_token:
-              print('::error::No OIDC token found. Check permissions.')
+              print('::error::No OIDC token found.')
               sys.exit(1)
 
           try:
-              # Request Token
               headers = {'Authorization': f'Bearer {request_token}'}
               resp = requests.get(f'{request_url}&audience={audience}', headers=headers)
               resp.raise_for_status()
-              jwt_token = resp.json()['value']
+              github_jwt = resp.json()['value']
+              print('::notice::GitHub Token Acquired')
+          except Exception as e:
+              print(f'::error::GitHub OIDC failure: {e}')
+              sys.exit(1)
 
-              # --- CRITICAL DEBUGGING ---
-              decoded = jwt.decode(jwt_token, options={'verify_signature': False})
-              print('\n============= TOKEN INSPECTION =============')
-              print(f" 1. Iss (Issuer):   {decoded.get('iss')}")
-              print(f" 2. Aud (Audience): {decoded.get('aud')}")
-              print(f" 3. Sub (Subject):  {decoded.get('sub')}")
-              print('============================================\n')
-              
-              # 2. Exchange with Cycode
-              # Sending BOTH formats (clientId and client_id) to cover API variances
-              payload = {
-                  'clientId': os.environ.get('CYCODE_CLIENT_ID'),
-                  'client_id': os.environ.get('CYCODE_CLIENT_ID')
-              }
-              
-              auth_headers = {
-                  'Authorization': f'Bearer {jwt_token}',
-                  'Content-Type': 'application/json'
-              }
+          # 2. Exchange with Cycode (Token in BODY, not Header)
+          client_id = os.environ.get('CYCODE_CLIENT_ID', '').strip() # Strip whitespace
+          url = os.environ.get('CYCODE_AUTH_URL')
 
-              print(f'Attempting exchange with Aud: {audience}...')
-              cy_resp = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=payload, headers=auth_headers)
+          # Attempt 1: Standard 'idToken' field
+          payload_1 = {
+              'clientId': client_id,
+              'idToken': github_jwt
+          }
+          
+          print(f'Attempting exchange (Payload: idToken)...')
+          
+          # NOTE: No Authorization header here. We are unauthenticated, asking for a token.
+          try:
+              res = requests.post(url, json=payload_1)
               
-              if cy_resp.status_code == 200:
-                  print('::notice::SUCCESS! Token exchanged.')
-                  # Safely grab the token
-                  data = cy_resp.json()
-                  token = data.get('token') or data.get('access_token')
-                  
-                  # Register the token for the next step
+              if res.status_code == 200:
+                  print('::notice::SUCCESS! Token exchanged using "idToken" field.')
+                  token = res.json().get('token') or res.json().get('access_token')
                   print(f'::add-mask::{token}')
                   with open(os.environ['GITHUB_ENV'], 'a') as f:
                       f.write(f'CYCODE_API_TOKEN={token}\n')
+                  sys.exit(0) # Exit successfully
               else:
-                  print(f'::error::Exchange Failed [{cy_resp.status_code}]')
-                  print(f'Response Body: {cy_resp.text}')
-                  sys.exit(1)
-
+                  print(f'Attempt 1 Failed [{res.status_code}]: {res.text}')
           except Exception as e:
-              print(f'::error::Script Error: {e}')
+              print(f'Attempt 1 Error: {e}')
+
+          # Attempt 2: Alternative 'assertion' field (RFC 7523 style)
+          print(f'Attempting exchange (Payload: assertion)...')
+          payload_2 = {
+              'clientId': client_id,
+              'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              'assertion': github_jwt
+          }
+          
+          try:
+              res = requests.post(url, json=payload_2)
+              
+              if res.status_code == 200:
+                  print('::notice::SUCCESS! Token exchanged using "assertion" field.')
+                  token = res.json().get('token') or res.json().get('access_token')
+                  print(f'::add-mask::{token}')
+                  with open(os.environ['GITHUB_ENV'], 'a') as f:
+                      f.write(f'CYCODE_API_TOKEN={token}\n')
+                  sys.exit(0)
+              else:
+                  print(f'Attempt 2 Failed [{res.status_code}]: {res.text}')
+                  sys.exit(1) # Fail if both attempts miss
+          except Exception as e:
+              print(f'Attempt 2 Error: {e}')
               sys.exit(1)
           EOF
-
-          # 2. Run the script
-          python debug_cycode.py
+          
+          python fix_cycode.py
 
       - name: Run Cycode Scan
-        # Only runs if the previous step succeeded
         if: success()
         run: |
           pip install cycode
