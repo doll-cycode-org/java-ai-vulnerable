@@ -13,6 +13,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Debug OIDC Response
+        run: |
+          # Request the token and save to a file
+          curl -v -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://app.cycode.com" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_response.txt 2>&1
+          
+          echo "--- START OF RESPONSE ---"
+          cat github_response.txt
+          echo "--- END OF RESPONSE ---"   
+
           
       - name: Get Cycode Token
         id: auth
