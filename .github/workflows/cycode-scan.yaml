@@ -26,7 +26,7 @@ jobs:
         run: pip install cycode
 
       # 1. Fetch GitHub OIDC Token (Audience = Client ID)
-- name: Fetch & Configure OIDC
+      - name: Fetch & Configure OIDC
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
