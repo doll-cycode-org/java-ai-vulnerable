@@ -17,14 +17,11 @@ jobs:
       - name: Get Cycode Token
         id: auth
         run: |
-          # 1. Request the OIDC token
-          # Note: Ensure NO trailing slashes in the audience
           AUDIENCE="https://app.cycode.com"
           
           RESPONSE=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
           
-          # DEBUG: If the response isn't JSON, this will show us what GitHub actually said
           if ! echo "$RESPONSE" | jq empty > /dev/null 2>&1; then
             echo "::error::GitHub OIDC request failed. Response was: $RESPONSE"
             exit 1
@@ -32,7 +29,6 @@ jobs:
 
           ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
           
-          # 2. Exchange for Cycode Token
           CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
             -H "Content-Type: application/json" \
             -d "{\"token\": \"$ID_TOKEN\"}")
