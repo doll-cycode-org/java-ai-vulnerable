@@ -17,24 +17,35 @@ jobs:
       - name: Get Cycode Token
         id: auth
         run: |
-          # 1. Get the JWT from GitHub with the specific audience
-          # Use the same AUD you entered in the Cycode dashboard
+          # 1. Request the OIDC token
+          # Note: Ensure NO trailing slashes in the audience
           AUDIENCE="https://app.cycode.com"
           
-          ID_TOKEN=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
+          RESPONSE=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
           
-          # 2. Exchange GitHub JWT for Cycode Access Token
-          RESPONSE=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
+          # DEBUG: If the response isn't JSON, this will show us what GitHub actually said
+          if ! echo "$RESPONSE" | jq empty > /dev/null 2>&1; then
+            echo "::error::GitHub OIDC request failed. Response was: $RESPONSE"
+            exit 1
+          fi
+
+          ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+          
+          # 2. Exchange for Cycode Token
+          CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
             -H "Content-Type: application/json" \
             -d "{\"token\": \"$ID_TOKEN\"}")
           
-          CYCODE_TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token')
           
-          # 3. Securely mask the token in logs and set as output
+          if [ "$CYCODE_TOKEN" == "null" ]; then
+            echo "::error::Cycode exchange failed: $CYCODE_RESP"
+            exit 1
+          fi
+
           echo "::add-mask::$CYCODE_TOKEN"
           echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
-
       - name: Run Cycode CLI Scan
         run: |
           # Install Cycode CLI (assuming pip)
