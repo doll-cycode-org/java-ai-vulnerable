@@ -24,39 +24,40 @@ jobs:
           cat github_response.txt
           echo "--- END OF RESPONSE ---"   
 
-          
       - name: Get Cycode Token
         id: auth
         run: |
           AUDIENCE="https://app.cycode.com"
           
-          # 1. Fetch GitHub JWT
-          # We use -f to make curl fail on 4XX/5XX errors
-          RESPONSE=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
+          # 1. Fetch GitHub JWT and save directly to a file
+          curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_jwt.json
           
-          # Check if GitHub returned valid JSON
-          if ! echo "$RESPONSE" | jq -e . > /dev/null 2>&1; then
-            echo "::error::GitHub OIDC failed. Message: $RESPONSE"
-            exit 1
-          fi
-          ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+          # 2. Extract the value field using the file (avoids echo/shell issues)
+          ID_TOKEN=$(jq -r '.value' github_jwt.json)
+          
+          # 3. Exchange for Cycode Access Token
+          # We use a heredoc to safely pass the token into the JSON body
+          cat <<EOF > cycode_payload.json
+          {"token": "$ID_TOKEN"}
+          EOF
 
-          # 2. Exchange for Cycode Access Token
           CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
             -H "Content-Type: application/json" \
-            -d "{\"token\": \"$ID_TOKEN\"}")
+            -d @cycode_payload.json)
           
-          # Check if Cycode accepted the token
-          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token // empty')
+          # 4. Extract Cycode Token
+          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token')
           
-          if [ -z "$CYCODE_TOKEN" ]; then
-            echo "::error::Cycode rejected the token. Response: $CYCODE_RESP"
+          if [ "$CYCODE_TOKEN" == "null" ] || [ -z "$CYCODE_TOKEN" ]; then
+            echo "::error::Cycode exchange failed. Response: $CYCODE_RESP"
             exit 1
           fi
 
           echo "::add-mask::$CYCODE_TOKEN"
           echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
+
+      
       - name: Run Cycode CLI Scan
         run: |
           # Install Cycode CLI (assuming pip)
