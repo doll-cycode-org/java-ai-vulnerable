@@ -1,0 +1,45 @@
+name: Cycode OIDC Scan
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Crucial: allows requesting the JWT
+      contents: read   # Allows checking out code
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Cycode Token
+        id: auth
+        run: |
+          # 1. Get the JWT from GitHub with the specific audience
+          # Use the same AUD you entered in the Cycode dashboard
+          AUDIENCE="https://app.cycode.com"
+          
+          ID_TOKEN=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
+          
+          # 2. Exchange GitHub JWT for Cycode Access Token
+          RESPONSE=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
+            -H "Content-Type: application/json" \
+            -d "{\"token\": \"$ID_TOKEN\"}")
+          
+          CYCODE_TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+          
+          # 3. Securely mask the token in logs and set as output
+          echo "::add-mask::$CYCODE_TOKEN"
+          echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Run Cycode CLI Scan
+        run: |
+          # Install Cycode CLI (assuming pip)
+          pip install cycode
+          
+          # Use the token from the previous step
+          export CYCODE_API_TOKEN=${{ steps.auth.outputs.token }}
+          cycode scan repository .
