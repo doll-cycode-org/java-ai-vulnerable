@@ -1,7 +1,9 @@
-name: Cycode OIDC Brute Force
+name: Cycode OIDC Scan
 
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     branches: [ "main" ]
 
 permissions:
@@ -9,88 +11,67 @@ permissions:
   contents: read
 
 jobs:
-  cycode-brute-force:
+  cycode-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Dependencies
-        run: pip install requests
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - name: Brute Force OIDC Exchange
+      - name: Install Dependencies
+        run: pip install requests cycode
+
+      - name: Exchange OIDC Token
+        id: exchange
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
           CYCODE_AUTH_URL: "https://api.cycode.com/api/v1/auth/oidc/token"
         run: |
-          cat <<EOF > brute_cycode.py
-          import os
-          import requests
-          import sys
+          python -c "
+          import os, requests, sys
 
-          # Setup
-          request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
-          request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
-          client_id = os.environ.get('CYCODE_CLIENT_ID').strip()
-          auth_url = os.environ.get('CYCODE_AUTH_URL')
+          # 1. Get Token from GitHub
+          token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
+          url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
+          audience = 'cycode-service' # Keep this matching your Cycode Config
 
-          def get_github_token(audience_value):
-              print(f'\\n[1] Requesting GitHub Token for Audience: {audience_value}')
-              headers = {'Authorization': f'Bearer {request_token}'}
-              # Fetch token
-              try:
-                  r = requests.get(f'{request_url}&audience={audience_value}', headers=headers)
-                  r.raise_for_status()
-                  return r.json()['value']
-              except Exception as e:
-                  print(f'   Failed to get OIDC token: {e}')
-                  return None
+          try:
+              headers = {'Authorization': f'Bearer {token}'}
+              resp = requests.get(f'{url}&audience={audience}', headers=headers)
+              resp.raise_for_status()
+              jwt = resp.json()['value']
+          except Exception as e:
+              print(f'::error::GitHub Token Error: {e}')
+              sys.exit(1)
 
-          def attempt_exchange(jwt, label):
-              print(f'[2] Attempting Cycode Exchange using [{label}] token...')
-              
-              # Standard OIDC Exchange Payload
-              payload = {'clientId': client_id}
-              
-              # Header MUST contain the JWT
-              headers = {
-                  'Authorization': f'Bearer {jwt}',
-                  'Content-Type': 'application/json'
-              }
+          # 2. Exchange with Cycode
+          # We send the JWT in both Header and Body to be safe
+          payload = {
+              'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              'assertion': jwt,
+              'clientId': os.environ.get('CYCODE_CLIENT_ID')
+          }
+          headers = {
+              'Authorization': f'Bearer {jwt}', 
+              'Content-Type': 'application/json'
+          }
 
-              resp = requests.post(auth_url, json=payload, headers=headers)
-              
-              if resp.status_code == 200:
-                  print(f'   ✅ SUCCESS! Accepted audience: {label}')
-                  token = resp.json().get('token') or resp.json().get('access_token')
+          try:
+              r = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=payload, headers=headers)
+              if r.status_code == 200:
+                  token = r.json().get('token') or r.json().get('access_token')
                   print(f'::add-mask::{token}')
                   with open(os.environ['GITHUB_ENV'], 'a') as f:
-                      f.write(f'CYCODE_API_TOKEN={token}\\n')
-                  return True
+                      f.write(f'CYCODE_API_TOKEN={token}\n')
               else:
-                  print(f'   ❌ FAILED ({resp.status_code}): {resp.text}')
-                  return False
-
-          # --- ATTEMPT 1: Audience = cycode-service ---
-          token_service = get_github_token('cycode-service')
-          if token_service:
-              if attempt_exchange(token_service, 'cycode-service'):
-                  sys.exit(0)
-
-          # --- ATTEMPT 2: Audience = Client ID ---
-          # This is the standard OIDC requirement, even if UI says otherwise
-          token_client = get_github_token(client_id)
-          if token_client:
-              if attempt_exchange(token_client, 'CLIENT_ID'):
-                  sys.exit(0)
-
-          print('\\n::error::All attempts failed.')
-          sys.exit(1)
-          EOF
-
-          python brute_cycode.py
+                  print(f'::error::Exchange Failed: {r.text}')
+                  sys.exit(1)
+          except Exception as e:
+              print(f'::error::Request Error: {e}')
+              sys.exit(1)
+          "
 
       - name: Run Cycode Scan
-        if: success()
         run: |
-          pip install cycode
           cycode scan path ./ \
             --branch ${{ github.head_ref || github.ref_name }} \
             --sca-scan \
