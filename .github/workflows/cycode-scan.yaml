@@ -46,6 +46,7 @@ jobs:
 
           echo "::add-mask::$CYCODE_TOKEN"
           echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
+
       - name: Run Cycode CLI Scan
         run: |
           # Install Cycode CLI (assuming pip)
