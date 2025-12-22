@@ -29,24 +29,29 @@ jobs:
         run: |
           AUDIENCE="https://app.cycode.com"
           
-          # 1. Fetch GitHub JWT and save directly to a file
+          # 1. Fetch GitHub JWT and save to file
           curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_jwt.json
           
-          # 2. Extract the value field using the file (avoids echo/shell issues)
+          # 2. Extract JWT value safely
           ID_TOKEN=$(jq -r '.value' github_jwt.json)
           
-          # 3. Exchange for Cycode Access Token
-          # We use a heredoc to safely pass the token into the JSON body
-          cat <<EOF > cycode_payload.json
-          {"token": "$ID_TOKEN"}
+          # 3. Create Cycode Payload (Quoted 'EOF' prevents shell expansion of ***)
+          cat <<'EOF' > cycode_payload.json
+          {
+            "token": "$ID_TOKEN"
+          }
           EOF
+          
+          # Use sed to manually swap the variable name for the token to avoid shell 'echo'
+          sed -i "s|\$ID_TOKEN|$ID_TOKEN|g" cycode_payload.json
 
+          # 4. Exchange for Cycode Access Token
           CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
             -H "Content-Type: application/json" \
             -d @cycode_payload.json)
           
-          # 4. Extract Cycode Token
+          # 5. Extract and mask
           CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token')
           
           if [ "$CYCODE_TOKEN" == "null" ] || [ -z "$CYCODE_TOKEN" ]; then
@@ -56,7 +61,6 @@ jobs:
 
           echo "::add-mask::$CYCODE_TOKEN"
           echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
-
       
       - name: Run Cycode CLI Scan
         run: |
