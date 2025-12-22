@@ -32,6 +32,8 @@ jobs:
           # 1. Fetch GitHub JWT and save to file
           curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_jwt.json
+
+          cat github_jwt.json 
           
           # 2. Extract JWT value safely
           ID_TOKEN=$(jq -r '.value' github_jwt.json)
