@@ -7,20 +7,26 @@ on:
     branches: [ "main" ]
 
 permissions:
-  id-token: write
+  id-token: write  # Required to fetch the JWT
   contents: read
 
 jobs:
   cycode-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Dependencies
-        run: pip install requests cycode
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-      - name: Fetch & Configure OIDC
+      - name: Install Cycode CLI
+        run: pip install cycode
+
+      # 1. Fetch GitHub OIDC Token (Audience = Client ID)
+      - name: Fetch and Set OIDC Token
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
@@ -28,43 +34,38 @@ jobs:
           import os
           import requests
           import sys
-
-          # --- CONFIGURATION ---
-          # 1. This MUST match the 'Audience' field in your Cycode UI exactly.
-          #    Try 'cycode-service' first. If that fails, try 'https://api.cycode.com'
-          target_audience = 'cycode-service'
-          # ---------------------
-
-          # 1. Get GitHub Token
+          # Docs say: Audience must match Client ID
+          client_id = os.environ.get('CYCODE_CLIENT_ID')
+          
+          # GitHub Actions OIDC Endpoint
           token_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
-          req_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
-
-          if not token_url or not req_token:
-              print('::error::OIDC Env Vars missing')
+          request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
+          if not token_url or not request_token:
+              print('::error::OIDC Environment variables missing')
               sys.exit(1)
-
           try:
-              # Request token with the correct audience
-              headers = {'Authorization': f'Bearer {req_token}'}
-              resp = requests.get(f'{token_url}&audience={target_audience}', headers=headers)
+              # Request token specifically for the Client ID
+              headers = {'Authorization': f'Bearer {request_token}'}
+              resp = requests.get(f'{token_url}&audience={client_id}', headers=headers)
               resp.raise_for_status()
               jwt = resp.json()['value']
               
-              # 2. Export for CLI
-              # The CLI detects this variable and uses it for authentication automatically
+              # MASK the token so it doesn't appear in logs
               print(f'::add-mask::{jwt}')
+              
+              # EXPORT as CYCODE_ID_TOKEN (Standard env var for Cycode CLI)
               with open(os.environ['GITHUB_ENV'], 'a') as f:
                   f.write(f'CYCODE_ID_TOKEN={jwt}\n')
               
-              print(f'::notice::Token acquired for Audience: {target_audience}')
-
+              print('::notice::CYCODE_ID_TOKEN has been set.')
+          
           except Exception as e:
-              print(f'::error::Token Fetch Failed: {e}')
+              print(f'::error::Failed to fetch OIDC token: {e}')
               sys.exit(1)
           "
-
+      # 2. Run Scan (CLI handles the exchange automatically)
       - name: Run Cycode Scan
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
-          cycode scan --scan-type secret path .
+          cycode scan --scan-type sca repository . 
