@@ -1,4 +1,4 @@
-name: Cycode OIDC Final Fix
+name: Cycode OIDC Scan
 
 on:
   push:
@@ -31,42 +31,41 @@ jobs:
           import requests
           import sys
 
-          # --- CRITICAL FIX ---
-          # We must ask GitHub to sign the token for the EXACT Audience 
-          # configured in your Cycode portal.
-          audience = 'https://api.cycode.com' 
-          # --------------------
+          # --- CONFIGURATION ---
+          # Docs confirm: Audience MUST be the Client ID
+          client_id = os.environ.get('CYCODE_CLIENT_ID').strip()
+          # ---------------------
 
-          # 1. Get Token from GitHub
+          # 1. Get GitHub Token
           token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
           url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
 
-          if not token or not url:
-              print('::error::GitHub OIDC Environment Variables missing')
+          if not token:
+              print('::error::No OIDC token found.')
               sys.exit(1)
 
           try:
-              # Request the token with the CORRECT Audience
+              # Request Token specifically for the Client ID
               headers = {'Authorization': f'Bearer {token}'}
-              resp = requests.get(f'{url}&audience={audience}', headers=headers)
+              resp = requests.get(f'{url}&audience={client_id}', headers=headers)
               resp.raise_for_status()
               jwt = resp.json()['value']
-              print(f'::notice::Acquired GitHub Token for audience: {audience}')
+              print(f'::notice::GitHub Token acquired for Client ID audience')
           except Exception as e:
-              print(f'::error::GitHub Token Fetch Error: {e}')
+              print(f'::error::GitHub OIDC failure: {e}')
               sys.exit(1)
 
           # 2. Exchange with Cycode
-          # Using the standard 'jwt-bearer' grant type
+          # Standard 'jwt-bearer' grant type
           payload = {
               'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
               'assertion': jwt,
-              'clientId': os.environ.get('CYCODE_CLIENT_ID')
+              'clientId': client_id
           }
           
-          # Send token in Header AND Body to cover all validation bases
+          # Send token in Header AND Body
           headers = {
-              'Authorization': f'Bearer {jwt}', 
+              'Authorization': f'Bearer {jwt}',
               'Content-Type': 'application/json'
           }
 
@@ -74,16 +73,22 @@ jobs:
               r = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=payload, headers=headers)
               
               if r.status_code == 200:
-                  token = r.json().get('token') or r.json().get('access_token')
-                  print('::notice::Successfully exchanged Cycode Token!')
-                  print(f'::add-mask::{token}')
+                  data = r.json()
+                  access_token = data.get('token') or data.get('access_token')
+                  
+                  print('::notice::Cycode Exchange Successful')
+                  print(f'::add-mask::{access_token}')
+                  
+                  # Export to ENV
                   with open(os.environ['GITHUB_ENV'], 'a') as f:
-                      f.write(f'CYCODE_API_TOKEN={token}\n')
+                      f.write(f'CYCODE_API_TOKEN={access_token}\n')
               else:
-                  print(f'::error::Exchange Failed [{r.status_code}]: {r.text}')
+                  print(f'::error::Exchange Failed [{r.status_code}]')
+                  print(f'Response Body: {r.text}')
                   sys.exit(1)
+
           except Exception as e:
-              print(f'::error::Request Error: {e}')
+              print(f'::error::Script Error: {e}')
               sys.exit(1)
           "
 
