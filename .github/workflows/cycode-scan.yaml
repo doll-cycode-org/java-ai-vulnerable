@@ -72,8 +72,4 @@ jobs:
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
-          cycode scan path ./ \
-            --branch ${{ github.head_ref || github.ref_name }} \
-            --sca-scan \
-            --iac-scan \
-            --secret-scan
+          cycode scan --scan-type sca repository . 
