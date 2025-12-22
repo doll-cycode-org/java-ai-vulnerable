@@ -13,60 +13,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Fetch OIDC Token
-        id: fetch-token
-        run: |
-          # 1. Verify variables exist
-          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "::error::GitHub OIDC variables are missing. Ensure 'permissions: id-token: write' is set at the JOB level."
-            exit 1
-          fi
-
-          # 2. Capture response and check for errors
-          # We use -i to see headers if it fails
-          RESPONSE=$(curl -sL "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://app.cycode.com" \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
-
-          # Check if the response is valid JSON
-          if ! echo "$RESPONSE" | jq . >/dev/null 2>&1; then
-            echo "::error::GitHub returned a non-JSON response. Likely an auth error."
-            echo "Response received: $RESPONSE"
-            exit 1
-          fi
-
-          ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
-          echo "token=$ID_TOKEN" >> $GITHUB_OUTPUT
           
       - name: Get Cycode Token
         id: auth
         run: |
           AUDIENCE="https://app.cycode.com"
           
+          # 1. Fetch GitHub JWT
+          # We use -f to make curl fail on 4XX/5XX errors
           RESPONSE=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
           
-          if ! echo "$RESPONSE" | jq empty > /dev/null 2>&1; then
-            echo "::error::GitHub OIDC request failed. Response was: $RESPONSE"
+          # Check if GitHub returned valid JSON
+          if ! echo "$RESPONSE" | jq -e . > /dev/null 2>&1; then
+            echo "::error::GitHub OIDC failed. Message: $RESPONSE"
             exit 1
           fi
-
           ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
-          
+
+          # 2. Exchange for Cycode Access Token
           CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
             -H "Content-Type: application/json" \
             -d "{\"token\": \"$ID_TOKEN\"}")
           
-          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token')
+          # Check if Cycode accepted the token
+          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token // empty')
           
-          if [ "$CYCODE_TOKEN" == "null" ]; then
-            echo "::error::Cycode exchange failed: $CYCODE_RESP"
+          if [ -z "$CYCODE_TOKEN" ]; then
+            echo "::error::Cycode rejected the token. Response: $CYCODE_RESP"
             exit 1
           fi
 
           echo "::add-mask::$CYCODE_TOKEN"
           echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
-
       - name: Run Cycode CLI Scan
         run: |
           # Install Cycode CLI (assuming pip)
