@@ -7,25 +7,19 @@ on:
     branches: [ "main" ]
 
 permissions:
-  id-token: write  # Required to fetch the JWT
+  id-token: write
   contents: read
 
 jobs:
   cycode-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+      - name: Install Dependencies
+        run: pip install requests cycode
 
-      - name: Install Cycode CLI
-        run: pip install cycode
-
-      # 1. Fetch GitHub OIDC Token (Audience = Client ID)
       - name: Fetch & Configure OIDC
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
@@ -68,7 +62,7 @@ jobs:
               print(f'::error::Token Fetch Failed: {e}')
               sys.exit(1)
           "
-      # 2. Run Scan (CLI handles the exchange automatically)
+
       - name: Run Cycode Scan
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
