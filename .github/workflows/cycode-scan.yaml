@@ -1,67 +1,101 @@
 name: Cycode OIDC Scan
+
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# 1. Essential: Allow the workflow to request the OIDC token
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
-  scan:
+  cycode-scan:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Crucial: allows requesting the JWT
-      contents: read   # Allows checking out code
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      - name: Debug OIDC Response
+      - name: Install Python (for helper script)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      # 2. Fetch the GitHub OIDC Token and Exchange for Cycode Token
+      - name: Generate Cycode Access Token
+        id: cycode_auth
+        env:
+          # You typically need a Client ID provided by Cycode for the OIDC integration
+          CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }} 
+          # The API Endpoint for your specific Cycode tenant
+          CYCODE_AUTH_URL: "https://api.cycode.com/api/v1/auth/oidc/token" 
         run: |
-          # Request the token and save to a file
-          curl -v -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://app.cycode.com" \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_response.txt 2>&1
+          pip install requests
           
-          echo "--- START OF RESPONSE ---"
-          cat github_response.txt
-          echo "--- END OF RESPONSE ---"   
+          python -c "
+          import os
+          import requests
+          import sys
 
+          # A. Get the GitHub OIDC Token
+          # GitHub Actions exposes the URL and Token for the OIDC service in env vars
+          request_token = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')
+          request_url = os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
 
-      - name: Get Cycode Token
-        id: auth
+          if not request_token or not request_url:
+              print('::error::OIDC Environment variables not found.')
+              sys.exit(1)
+
+          headers = {'Authorization': f'Bearer {request_token}'}
+          # Usually, you request a specific audience (aud) matching your Cycode config
+          audience = 'cycode-service' 
+          
+          try:
+              oidc_response = requests.get(f'{request_url}&audience={audience}', headers=headers)
+              oidc_response.raise_for_status()
+              github_jwt = oidc_response.json()['value']
+              print('::notice::Successfully retrieved GitHub OIDC Token')
+          except Exception as e:
+              print(f'::error::Failed to get GitHub OIDC Token: {e}')
+              sys.exit(1)
+
+          # B. Exchange GitHub JWT for Cycode Access Token
+          # Note: The payload structure depends on Cycode's specific API requirements
+          payload = {
+              'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+              'client_id': os.environ.get('CYCODE_CLIENT_ID'),
+              'assertion': github_jwt
+          }
+
+          try:
+              cycode_response = requests.post(os.environ.get('CYCODE_AUTH_URL'), json=payload)
+              cycode_response.raise_for_status()
+              cycode_token = cycode_response.json()['access_token']
+              
+              # C. Export the token as a masked environment variable for next steps
+              # This ensures the token is redacted in logs
+              print(f'::add-mask::{cycode_token}')
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(f'CYCODE_API_TOKEN={cycode_token}\n')
+              
+              print('::notice::Successfully authenticated with Cycode')
+          except Exception as e:
+              print(f'::error::Failed to exchange token with Cycode: {e}')
+              print(f'Response: {cycode_response.text if 'cycode_response' in locals() else 'N/A'}')
+              sys.exit(1)
+          "
+
+      # 3. Run the Scan using the generated Token
+      - name: Install Cycode CLI
+        run: pip install cycode
+
+      - name: Run Cycode Scan
+        # The CLI usually looks for CYCODE_API_TOKEN by default
         run: |
-          AUDIENCE="https://app.cycode.com"
-          
-          # 1. Fetch the GitHub JWT and save it directly to a file
-          # This avoids shell expansion/echo issues entirely
-          curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" > github_jwt.json
-          
-          # 2. Extract the value field from the file
-          ID_TOKEN=$(jq -r '.value' github_jwt.json)
-          
-          # 3. Exchange for Cycode Access Token
-          # We pass the token via a JSON file to avoid shell command-line limits
-          echo "{\"token\": \"$ID_TOKEN\"}" > cycode_payload.json
-          
-          CYCODE_RESP=$(curl -s -X POST "https://api.cycode.com/api/v1/auth/oidc" \
-            -H "Content-Type: application/json" \
-            -d @cycode_payload.json)
-          
-          # 4. Extract Cycode Token
-          CYCODE_TOKEN=$(echo "$CYCODE_RESP" | jq -r '.access_token // empty')
-          
-          if [ -z "$CYCODE_TOKEN" ]; then
-            echo "::error::Cycode rejected the token. Response: $CYCODE_RESP"
-            exit 1
-          fi
-
-          echo "::add-mask::$CYCODE_TOKEN"
-          echo "token=$CYCODE_TOKEN" >> $GITHUB_OUTPUT
-
-      - name: Run Cycode CLI Scan
-        run: |
-          # Install Cycode CLI (assuming pip)
-          pip install cycode
-          
-          # Use the token from the previous step
-          export CYCODE_API_TOKEN=${{ steps.auth.outputs.token }}
-          cycode scan repository .
+          cycode scan path ./ \
+            --branch ${{ github.head_ref || github.ref_name }} \
+            --sca-scan \
+            --iac-scan \
+            --secret-scan
