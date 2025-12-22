@@ -14,6 +14,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fetch OIDC Token
+        id: fetch-token
+        run: |
+          # 1. Verify variables exist
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "::error::GitHub OIDC variables are missing. Ensure 'permissions: id-token: write' is set at the JOB level."
+            exit 1
+          fi
+
+          # 2. Capture response and check for errors
+          # We use -i to see headers if it fails
+          RESPONSE=$(curl -sL "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://app.cycode.com" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}")
+
+          # Check if the response is valid JSON
+          if ! echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "::error::GitHub returned a non-JSON response. Likely an auth error."
+            echo "Response received: $RESPONSE"
+            exit 1
+          fi
+
+          ID_TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+          echo "token=$ID_TOKEN" >> $GITHUB_OUTPUT
+          
       - name: Get Cycode Token
         id: auth
         run: |
