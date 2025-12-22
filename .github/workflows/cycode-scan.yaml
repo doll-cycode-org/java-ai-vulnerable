@@ -72,4 +72,4 @@ jobs:
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
-          cycode scan --scan-type sca repository . 
+          cycode scan --scan-type secret path .
