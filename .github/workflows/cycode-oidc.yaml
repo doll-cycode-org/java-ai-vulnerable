@@ -10,7 +10,7 @@ jobs:
   cycode:
     runs-on: ubuntu-latest
     env:
-      CYCODE_API_URL: ${{ vars.CYCODE_API_URL }}
+      #CYCODE_API_URL: ${{ vars.CYCODE_API_URL }}
       CYCODE_CLIENT_ID: ${{ vars.CYCODE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
