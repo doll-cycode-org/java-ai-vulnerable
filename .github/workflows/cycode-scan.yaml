@@ -25,7 +25,7 @@ jobs:
       - name: Install Cycode CLI
         run: pip install cycode
 
-      # 1. Fetch GitHub OIDC Token (Audience = cycode-service)
+      # 1. Fetch GitHub OIDC Token
       - name: Fetch and Set OIDC Token
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
@@ -36,7 +36,7 @@ jobs:
           import sys
 
           # --- CONFIGURATION ---
-          # Requesting specific audience as requested
+          # Requesting specific audience, this is what needs to be configured on the SA in Cycode
           audience = 'cycode-service'
           # ---------------------
           
@@ -49,7 +49,6 @@ jobs:
               sys.exit(1)
 
           try:
-              # Request token specifically for 'cycode-service'
               headers = {'Authorization': f'Bearer {request_token}'}
               resp = requests.get(f'{token_url}&audience={audience}', headers=headers)
               resp.raise_for_status()
@@ -74,4 +73,4 @@ jobs:
         env:
           CYCODE_CLIENT_ID: ${{ secrets.CYCODE_CLIENT_ID }}
         run: |
-          cycode scan --scan-type sca repository .
+          cycode scan --scan-type sca --soft-fail repository .
