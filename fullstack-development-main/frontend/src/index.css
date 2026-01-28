@@ -1,0 +1,335 @@
+html {
+    background-color: rgb(12, 50, 79);
+  background-size: 100%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  font-family: 'Noto Sans', sans-serif;
+  margin: 0;
+}
+
+
+pre {
+
+    white-space: pre-wrap;
+
+}
+
+.button {
+  color: black;
+
+}
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.heading {
+  font-family: 'Cairo', sans-serif;
+  font-size: 25px;
+  margin: 0px 0px 0px 0px;
+  width: 100%;
+  background-color: rgb(94, 145, 195);
+  color: white;
+	text-shadow:0px 1px 0px #283966;
+  animation: fadeInAnimation ease 3s;
+    animation-iteration-count: 1;
+    animation-fill-mode: forwards;
+}
+
+
+#banner {
+  text-align: center;
+  font-family: 'Noto Sans', sans-serif;
+  font-size: 10px;
+}
+
+#bodyFeild {
+  border-radius: 25px;
+  margin-top: 3%;
+  margin-left: 15%;
+  margin-right: 15%;
+  border-style: solid;
+  background-color: rgb(249, 249, 249);
+  min-width: 1200px;
+  min-height: 300px;
+}
+
+
+#navBar {
+  text-align: center;
+  background-color: rgb(94, 145, 195);
+
+}
+
+/**
+welcome page css
+**/
+
+.welcomeImages {
+  width: 120px;
+  height: 120px;
+  padding: 0 20px 0 20px;
+}
+
+.welcomeButton {
+  font-family: 'Cairo', sans-serif;
+  min-width: 120px;
+  margin-left: 7px;
+  border-radius: 20px;
+  width:10%;
+	display:inline-block;
+	cursor:pointer;
+  background: rgb(12, 50, 79);
+	color: white;
+	font-size:22px;
+	padding:6px 7px;
+	text-decoration:none;
+	text-shadow:0px 1px 0px #283966;
+  border: solid;
+  border-width: 3px;
+  transition:         background 1s ease-out,
+                      color 1s ease-out;
+
+}
+
+.welcomeButton:hover {
+  color: rgb(255, 153, 61);
+}
+
+.Heading {
+  margin-top:30%;
+  font-size: 80px;
+  animation: fadeInAnimation ease 3s;
+    animation-iteration-count: 1;
+    animation-fill-mode: forwards;
+  border: solid;
+  border-color: white;
+  border-width: 0 0 5px 0;
+}
+
+
+#welcomeWrapper {
+  height: 100%;
+}
+
+
+#welcomeleft {
+  width: 50%;
+  height: 100%;
+  float: left;
+  text-align: center;
+  color: white;
+  border-bottom: 10px;
+  border-color: white;
+
+}
+#contentRight {
+  width: 50%;
+  height: 100%;
+  float: right;
+  font-size: 20px;
+}
+
+#RightWrapper {
+  background-color: white;
+  min-width: 50%;
+  min-height: 50%;
+  border: solid;
+  border-color: rgb(255, 153, 61);
+  border-radius: 20px;
+  margin: 20% 2% 0 0;
+  padding: 10px 0px 10px 10px;
+  position: relative;
+  background-color: #f8f8ff;
+}
+
+#welcomeFooter {
+  margin-top: 16%;
+  text-align: center;
+}
+/**
+end welcome
+**/
+
+
+/**
+Home page css
+**/
+
+#projectDescriptionHome {
+  display: flex;
+}
+
+
+#homeleft {
+  width: 50%;
+  height: 100%;
+  float: left;
+  text-align: center;
+  color: white;
+}
+#homeRight {
+  width: 50%;
+  height: 100%;
+  float: right;
+  font-size: 20px;
+}
+
+
+#portrait {
+  width: 200px;
+  height: auto;
+  border: solid;
+  border-width: 4px;
+  border-radius: 20px;
+  float: right;
+  margin: 20px 10px 2px 12px;
+}
+
+#contenthomeleft {
+  width: auto%;
+}
+#contenthomeright {
+  width: 25%;
+  padding-left: 15px;
+  padding-right: 15px;
+  padding-top: 10px;
+  height: 200px;
+}
+
+/*
+  end home page CSS
+ */
+
+/*
+Portfolio css
+*/
+
+#portfolioBody {
+  width: auto;
+}
+#portfolioRight {
+  width: 25%;
+  float: right;
+  margin-right: 20px;
+}
+
+#portfolioYaml {
+  border: solid;
+  width: 100%;
+  border-color: grey;
+  border-width: 1px;
+  margin-bottom: 15px;
+  margin-left: 5px;
+  margin-right: 50px;
+  padding-left: 2px;
+  padding-bottom: 1px;
+  padding-top: 1px;
+  background-color: rgb(238, 240, 240);
+  font-size: 12px;
+  font-family: sans-serif;
+  white-space: pre;
+}
+
+.testbutton {
+  text-decoration: none;
+  border-radius: 12px;
+  padding: 2px 12px 2px 12px;
+  text-shadow: 1px;
+  border-width: 3px;
+  font-size: 17px;
+  color: white;
+  -webkit-transition: color 1s;
+  -moz-transition:    color 1s;
+  -ms-transition:     color 1s;
+  -o-transition:      color 1s;
+  transition:         color 1s;
+  background-color:rgb(94, 145, 195);
+
+}
+
+.testbutton:hover {
+  background-color:rgb(114, 165, 215);
+
+}
+
+#test {
+ text-align: center;
+}
+/*
+end portfolio CSS
+*/
+
+
+/*
+Start resume CSS
+*/
+
+#resumeRightWrapper {
+  width: 100%;
+  height: 100%;
+  height: auto;
+}
+
+#resumeRight{
+  width: 50%;
+  height: 100%;
+  float: right;
+  font-size: 20px;
+}
+
+.importedResume {
+  background-color: white;
+  width:98%;
+  height: 700px;
+  border: solid;
+  border-color: rgb(255, 153, 61);
+  border-radius: 20px;
+  margin: 20% 2% 0 0;
+  position: relative;
+}
+
+
+
+/*
+end resume css
+*/
+#generalDescription {
+  font-size: 15px;
+  text-align: center;
+}
+
+#projectDescription {
+  margin-top: 10px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+#additonalText {
+  margin-top: 10px;
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-bottom: 15px;
+}
+
+#WebScraper {
+  border: solid;
+  border-color: grey;
+  border-width: 1px;
+  margin-bottom: 15px;
+  margin-left: 10px;
+  margin-right: 10px;
+  padding-left: 10px;
+  padding-bottom: 1px;
+  padding-top: 1px;
+  background-color: rgb(238, 240, 240);
+  font-size: 12px;
+  font-family: sans-serif;
+}

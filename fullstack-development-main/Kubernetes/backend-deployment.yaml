@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: portfolio-backend
+  name: portfolio-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portfolio-backend
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: portfolio-backend
+    spec:
+      containers:
+      - image: doll1av/backend:testing
+        name: backend
+        ports:
+        - containerPort: 3001
+        resources: {}
+status: {}
