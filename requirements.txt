@@ -1,18 +1,1 @@
-# Vulnerable Python dependencies for security testing purposes
-# These versions contain known CVEs and should NOT be used in production
-
-Django==2.2.0
-requests==2.19.1
-Pillow==8.2.0
-PyYAML==5.1
-cryptography==2.6.1
-urllib3==1.24.1
-paramiko==2.4.1
-Flask==0.12.2
-Jinja2==2.10.0
-lxml==4.1.0
-SQLAlchemy==1.2.0
-celery==4.0.2
-werkzeug==0.14.1
-numpy==1.16.0
-boto3==1.9.0
+tox=1.0.0
