@@ -1,6 +1,8 @@
+
 import sqlite3
 import os
 import subprocess
+import operator
 
 # Vulnerable to SQL injection
 def get_user(username):
@@ -20,9 +22,21 @@ def read_file(filename):
     with open("/var/data/" + filename, "r") as f:
         return f.read()
 
-# Vulnerable to eval injection
-def calculate(expression):
-    return eval(expression)
+# Define a dictionary of allowed operations
+operations = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv
+}
+
+def calculate(num1, op, num2):
+    try:
+        return operations[op](num1, num2)
+    except KeyError:
+        return "Invalid operation"
+    except ZeroDivisionError:
+        return "Cannot divide by zero"
 
 if __name__ == "__main__":
     username = input("Enter username: ")
@@ -34,5 +48,7 @@ if __name__ == "__main__":
     filename = input("Enter filename to read: ")
     print(read_file(filename))
 
-    expr = input("Enter expression to evaluate: ")
-    print(calculate(expr))
+    num1 = float(input("Enter first number: "))
+    op = input("Enter operation (+, -, *, /): ")
+    num2 = float(input("Enter second number: "))
+    print(calculate(num1, op, num2))
