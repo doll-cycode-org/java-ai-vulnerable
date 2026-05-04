@@ -1,0 +1,20 @@
+{
+  "user_id": "test_user_88",
+  "payment_method": {
+    "type": "credit_card",
+    "card_holder": "John Doe",
+    "card_number": "4222222222222222",
+    "expiry_month": 12,
+    "expiry_year": 2028,
+    "cvv": "123",
+    "billing_address": {
+      "street": "123 Main St",
+      "city": "Anytown",
+      "state": "CA",
+      "zip_code": "12345",
+      "country": "USA"
+    },
+    "social_security_number": "123-45-6789",
+    "date_of_birth": "1990-01-01"
+  }
+}
