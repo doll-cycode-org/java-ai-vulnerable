@@ -16,22 +16,6 @@
         ]
     },
     "default": {
-        "amqp": {
-            "hashes": [
-                "sha256:6f0956d2c86994f0fbff0bf88c8ab7c8fce60c8de2ca1a3f9b05a3e9dcc87971",
-                "sha256:bf07b1e7d6ef3f1f4f4b85c9a4e2fd6eb4a7edd8498e8b45197d75024d0ff7a3"
-            ],
-            "indirect": true,
-            "version": "==5.1.1"
-        },
-        "billiard": {
-            "hashes": [
-                "sha256:cad9c2be13574f7b928de60e0a9143ed7f19a20c48a56db7f16fbb7d6be4e87a",
-                "sha256:3c4d8f75f41f99c5e9b6d31e35fc1c4e63d71c0fdba0a21a6d1f8c5cef68e94e"
-            ],
-            "indirect": true,
-            "version": "==3.6.4.0"
-        },
         "celery": {
             "hashes": [
                 "sha256:4da3ea41e0b9f42b28ac3e5e62f7b78ae1508ed5f1f0d8e3f7be3f75e04e27fe",
