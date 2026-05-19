@@ -1,5 +1,6 @@
 package com.example;
 
+import com.example.vuln.LoginHandler;
 import com.google.gson.Gson;
 import static spark.Spark.*;
 
@@ -26,9 +27,20 @@ public class VulnApp {
         // Setup in-memory DB
         Connection conn = DriverManager.getConnection("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "sa", "");
         Statement st = conn.createStatement();
+        // Legacy table kept for the intentionally-vulnerable /sql and /login (vuln) endpoints
         st.execute("CREATE TABLE users(username VARCHAR(255), password VARCHAR(255));");
         // seed with weak MD5 hashed password
         st.execute("INSERT INTO users(username, password) VALUES('admin', '" + md5("password") + "')");
+
+        // Secure users table used by the new /secure/login endpoint
+        st.execute("CREATE TABLE users_secure(" +
+                   "  username      VARCHAR(255) PRIMARY KEY," +
+                   "  salt          VARCHAR(512) NOT NULL," +
+                   "  password_hash VARCHAR(512) NOT NULL" +
+                   ");");
+        // Seed a demo account via the secure handler (hashed + salted)
+        LoginHandler loginHandler = new LoginHandler(conn);
+        loginHandler.registerUser("admin", "changeme");
 
         // Reflected XSS example
         get("/xss", (req, res) -> {
@@ -93,6 +105,65 @@ public class VulnApp {
             Gson g = new Gson();
             // INTENTIONALLY returns secrets for testing scanners
             return g.toJson(props);
+        });
+
+        // ----------------------------------------------------------------
+        // SECURE login / logout endpoints
+        // ----------------------------------------------------------------
+
+        // POST /secure/login  { username=..., password=... }
+        // Returns a session token on success; 401 on failure.
+        post("/secure/login", (req, res) -> {
+            String username = req.queryParams("username");
+            String password = req.queryParams("password");
+
+            if (username == null || password == null) {
+                res.status(400);
+                return "{\"error\":\"username and password are required\"}";
+            }
+
+            try {
+                String token = loginHandler.login(username, password);
+                if (token != null) {
+                    res.status(200);
+                    res.type("application/json");
+                    // Return only the token — never echo back secrets or credentials
+                    return "{\"token\":\"" + token + "\"}";
+                } else {
+                    res.status(401);
+                    res.type("application/json");
+                    // Generic message — no username enumeration
+                    return "{\"error\":\"Invalid credentials\"}";
+                }
+            } catch (IllegalArgumentException e) {
+                res.status(400);
+                res.type("application/json");
+                return "{\"error\":\"" + e.getMessage() + "\"}";
+            }
+        });
+
+        // POST /secure/logout  { token=... }
+        post("/secure/logout", (req, res) -> {
+            String token = req.queryParams("token");
+            loginHandler.logout(token);
+            res.status(200);
+            res.type("application/json");
+            return "{\"message\":\"Logged out\"}";
+        });
+
+        // GET /secure/protected  — example of a protected resource
+        get("/secure/protected", (req, res) -> {
+            String token = req.headers("Authorization");
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+            if (!loginHandler.isSessionValid(token)) {
+                res.status(401);
+                res.type("application/json");
+                return "{\"error\":\"Unauthorized\"}";
+            }
+            res.type("application/json");
+            return "{\"message\":\"Welcome to the protected resource\"}";
         });
 
         get("/", (req, res) -> "Vulnerable app (for scanners). See README.md");

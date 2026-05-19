@@ -1,0 +1,6 @@
+repos:
+  - repo: https://github.com/cycodehq/cycode-cli
+    rev: v3.5.0
+    hooks:
+      - id: cycode
+        stages: [pre-push]
