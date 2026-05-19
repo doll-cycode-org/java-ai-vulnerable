@@ -3,4 +3,4 @@ repos:
     rev: v3.5.0
     hooks:
       - id: cycode
-        stages: [pre-push]
+        stages: [pre-commit]
