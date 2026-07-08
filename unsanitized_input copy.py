@@ -1,13 +1,14 @@
+
 import sqlite3
 import os
 import subprocess
 
-# Vulnerable to SQL injection
+# Fixed to prevent SQL injection
 def get_user(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    query = "SELECT * FROM users WHERE username = '" + username + "'"
-    cursor.execute(query)
+    query = "SELECT * FROM users WHERE username = ?"
+    cursor.execute(query, (username,))
     return cursor.fetchall()
 
 # Vulnerable to command injection
