@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import subprocess
+import ast
 
 # Vulnerable to SQL injection
 def get_user(username):
@@ -20,9 +21,12 @@ def read_file(filename):
     with open("/var/data/" + filename, "r") as f:
         return f.read()
 
-# Vulnerable to eval injection
+# Fixed: Using ast.literal_eval for safe evaluation of literals
 def calculate(expression):
-    return eval(expression)
+    try:
+        return ast.literal_eval(expression)
+    except (ValueError, SyntaxError):
+        return "Invalid expression"
 
 if __name__ == "__main__":
     username = input("Enter username: ")
